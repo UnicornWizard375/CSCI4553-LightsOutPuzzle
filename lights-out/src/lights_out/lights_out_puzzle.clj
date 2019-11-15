@@ -33,7 +33,7 @@
    })
 
 (def simple-start-problem
-  {:grid simple-start-map, :min 0, :max 5})
+  {:grid simple-start-map, :min 0, :max 4})
 
 (defn light-heuristic
   [state-map]
@@ -42,13 +42,23 @@
 (defn get-adjacent
   "Note that this also returns the node given as an arg.
 This is because get-adjacent " 
-  [[x y] min max]
-  (filterv
-   (fn [[x y]] (and (<= min x max)
-                    (<= min y max)))
-   [[x y] [(+ x 1) y] [(- x 1) y] [x (+ y 1)] [x (- y 1)]]
-   )
-  )
+  [[x y :as input] min max]
+  (try
+    (filterv
+     (fn [[a b]] (and (<= min a max)
+                      (<= min b max)))
+     [
+      [x y] 
+      [(+ x 1) y] 
+      [(- x 1) y] 
+      [x (+ y 1)] 
+      [x (- y 1)]
+      ]
+     )
+    (catch Exception e (str "Caught exception: " (.getmessage e) \newline
+                            "Get-adjacent was passed " input))
+    )
+    )
 
 (defn get-adjacent-submap
   "Returns a submap of problem's light map containing only 
@@ -74,7 +84,7 @@ but tweak a few elements.  The obvious way to do this is to use the map function
 over the hash map.  The alternative way would be to go through the list, recursively 
 conj-ing on either the original value or the tweaked value.  Problem: a map is actually
 a sequence of MapEntrys, which is a weird hidden data type.  Hence the digging into clojure.lang.
-This function takes a vector of the node coordinates to toggle and a grid of lights."
+This function takes a collection of the node coordinates to toggle and a grid of lights."
   [to-toggle grid]
   (map (fn [node] (if (contains? to-toggle (first node))
                     (clojure.lang.MapEntry/create (first node) (not (second node)))
@@ -102,17 +112,25 @@ the problem, any given node needs to be toggled a maximum of once, and the order
 nodes are toggled does not matter.  The set returned contains all lights which were toggled
 an odd number of times during exploration, and as such toggling them in any order will provide
 an efficient solution.  This is not guarenteed to be the best solution "
-  [{initial-grid :grid, min-val :min, max-val :max} :as problem]
-  (loop [grid initial-grid
-         steps {}]
-    (let [best-node (max-key (fn [x] (node-heuristic x problem)) (keys grid))]
-      (if (not (reduce or (vals grid))) ;are all the lights out?
-        (println steps)
-        (recur 
-         (toggle-light-by-list (get-adjacent best-node min-val max-val) grid)
-         (toggle-contains best-node steps)
-         )
-        )
-      )
-    )
+  ([problem]
+   (greedy-search problem -1))
+  
+  ([{initial-grid :grid, min-val :min, max-val :max :as problem}, max-tries]
+   (loop [grid initial-grid
+          steps {}
+          tries 0]
+     ;This is looping forever 
+     (let [best-node (apply max-key (fn [x] (node-heuristic x problem)) (keys grid))]
+       ;This is storing the whole world and not just the node
+       (println "Best-node: " best-node)
+       (cond
+         (not (reduce (fn [x y] (or x y)) (vals grid))) (println steps)
+         (= tries max-tries) :max-calls-reaches
+         :else
+         (recur
+          (toggle-light-by-list (get-adjacent best-node min-val max-val) grid)
+          (toggle-contains best-node steps)
+          (+ tries 1))))
+     )
+   )
   )
